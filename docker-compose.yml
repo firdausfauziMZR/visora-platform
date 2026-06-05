@@ -1,0 +1,67 @@
+services:
+  backend:
+    image: php:8.3-cli
+    container_name: visora-backend
+    working_dir: /app
+    volumes:
+      - ./apps/backend:/app
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: local
+      APP_URL: http://localhost:8000
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: visora
+      DB_USERNAME: visora
+      DB_PASSWORD: visora
+      ML_SERVICE_URL: http://ml-service:8001
+      QDRANT_URL: http://qdrant:6333
+    depends_on:
+      - postgres
+      - qdrant
+    command: php artisan serve --host=0.0.0.0 --port=8000
+
+  ml-service:
+    image: python:3.12-slim
+    container_name: visora-ml-service
+    working_dir: /app
+    volumes:
+      - ./apps/ml-service:/app
+      - ./apps/backend/storage:/backend-storage
+    ports:
+      - "8001:8001"
+    environment:
+      APP_ENV: local
+      QDRANT_URL: http://qdrant:6333
+      BACKEND_STORAGE_PATH: /backend-storage
+    depends_on:
+      - qdrant
+    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+
+  postgres:
+    image: postgres:16
+    container_name: visora-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: visora
+      POSTGRES_USER: visora
+      POSTGRES_PASSWORD: visora
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: visora-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+
+volumes:
+  postgres-data:
+  qdrant-data:
+
