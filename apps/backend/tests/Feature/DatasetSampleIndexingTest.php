@@ -39,10 +39,20 @@ class DatasetSampleIndexingTest extends TestCase
                     'filename' => basename($path),
                     'faces_detected' => 1,
                     'embedding_status' => 'generated',
+                    'body_embedding_status' => 'generated',
+                    'body_embeddings_count' => 1,
                     'faces' => [
                         [
                             'box' => ['x' => 1, 'y' => 2, 'width' => 30, 'height' => 40],
                             'embedding' => array_fill(0, 128, 0.1),
+                        ],
+                    ],
+                    'body_embeddings' => [
+                        [
+                            'body_index' => 0,
+                            'source_face_index' => 0,
+                            'box' => ['x' => 0, 'y' => 0, 'width' => 120, 'height' => 240],
+                            'embedding' => array_fill(0, 512, 0.01),
                         ],
                     ],
                 ]);
@@ -73,6 +83,7 @@ class DatasetSampleIndexingTest extends TestCase
             $this->assertSame('completed', $indexingJob->refresh()->status);
             $this->assertSame('indexed', $photo->refresh()->status);
             $this->assertSame(1, $photo->faceEmbeddings()->count());
+            $this->assertSame(1, $photo->bodyEmbeddings()->count());
         }
     }
 }

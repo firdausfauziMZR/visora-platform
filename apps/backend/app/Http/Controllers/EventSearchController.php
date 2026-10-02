@@ -16,6 +16,7 @@ class EventSearchController extends Controller
     public function store(Request $request, Event $event, PgvectorFaceSearch $faceSearch): View|RedirectResponse
     {
         abort_unless($event->is_active, 404);
+        abort_unless($event->isAccessibleBy($request->user()), 403);
 
         $validated = $request->validate([
             'selfie' => ['required', 'image', 'max:10240'],

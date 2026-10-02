@@ -1,0 +1,4 @@
+numpy
+torch
+torchvision
+git+https://github.com/KaiyangZhou/deep-person-reid.git

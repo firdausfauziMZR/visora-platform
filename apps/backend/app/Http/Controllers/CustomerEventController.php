@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Event;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class CustomerEventController extends Controller
@@ -19,9 +20,10 @@ class CustomerEventController extends Controller
         ]);
     }
 
-    public function show(Event $event): View
+    public function show(Request $request, Event $event): View
     {
         abort_unless($event->is_active, 404);
+        abort_unless($event->isAccessibleBy($request->user()), 403);
 
         return view('events.show', [
             'event' => $event->loadCount(['photos', 'faceEmbeddings']),

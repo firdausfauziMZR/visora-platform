@@ -29,11 +29,20 @@ Laravel calls the local Python ML script directly. These `.env` settings should 
 VISORA_ML_PYTHON=/Users/hafeez/Workspaces/visora-platform/apps/ml-service/.venv/bin/python
 VISORA_ML_SCRIPT=/Users/hafeez/Workspaces/visora-platform/apps/ml-service/visora_ml_cli.py
 VISORA_ML_TIMEOUT=60
+VISORA_AUTO_INDEX_ON_UPLOAD=false
+VISORA_IMAGE_VARIANTS=true
+```
+
+If body Re-ID indexing is enabled locally, point Laravel at the Re-ID environment instead:
+
+```text
+VISORA_ML_PYTHON=/Users/hafeez/Workspaces/visora-platform/.venv-reid/bin/python
+VISORA_ML_TIMEOUT=120
 ```
 
 ## Current Runtime Status
 
-The database is available locally, Laravel has been generated, the Python ML CLI has OpenCV YuNet face detection plus SFace embeddings, and PostgreSQL pgvector is used for face similarity search.
+The database is available locally, Laravel has been generated, the Python ML CLI has OpenCV YuNet face detection plus SFace embeddings, OSNet body embeddings, and PostgreSQL pgvector is used for similarity search storage.
 
 Current access targets:
 
@@ -58,7 +67,20 @@ Next implementation step: click through upload plus queue-indexing in Filament u
 
 ## Start Local Servers
 
-Start Laravel:
+Start the backend and indexing worker together:
+
+```bash
+cd /Users/hafeez/Workspaces/visora-platform/apps/backend
+composer run dev:admin
+```
+
+This is the normal local admin workflow now:
+
+- Laravel serves on `http://127.0.0.1:8002`
+- uploaded event photos are auto-queued for indexing
+- the queue worker immediately starts processing them
+
+If you only need the web server, run:
 
 ```bash
 cd /Users/hafeez/Workspaces/visora-platform/apps/backend
@@ -69,12 +91,12 @@ Test the Python ML CLI directly:
 
 ```bash
 cd /Users/hafeez/Workspaces/visora-platform/apps/ml-service
-.venv/bin/python visora_ml_cli.py index-photo --event-id local-smoke --photo-id sample-1 --photo-path ../../datasets/samples/lfw/George_HW_Bush_0001.jpg
+../../.venv-reid/bin/python visora_ml_cli.py index-photo --event-id local-smoke --photo-id sample-1 --photo-path ../../datasets/samples/lfw/George_HW_Bush_0001.jpg
 ```
 
-Start the Laravel queue worker when testing queued indexing:
+Start only the Laravel queue worker:
 
 ```bash
 cd /Users/hafeez/Workspaces/visora-platform/apps/backend
-php artisan queue:work
+php artisan queue:work --tries=3 --timeout=120
 ```

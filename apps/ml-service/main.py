@@ -8,6 +8,7 @@ from face_detection import (
     FaceDetectionError,
     detect_faces_with_embeddings,
 )
+from text_recognition import text_payload
 from vector_store import VectorStoreError, search_faces, upsert_faces
 
 
@@ -30,6 +31,9 @@ class IndexResponse(BaseModel):
     filename: str
     faces_detected: int
     faces: list[dict[str, int]] = Field(default_factory=list)
+    text_status: str = "skipped"
+    text: str = ""
+    bib_candidates: list[str] = Field(default_factory=list)
     qdrant_status: str = "stored"
 
 
@@ -38,6 +42,8 @@ class SearchResponse(BaseModel):
     event_id: str
     filename: str
     faces_detected: int = 0
+    text_status: str = "skipped"
+    text: str = ""
     matches: list[str] = Field(
         default_factory=list,
         description="Placeholder photo IDs until Qdrant search is implemented.",
@@ -65,6 +71,7 @@ async def index_photo(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     filename = photo.filename or "uploaded-photo"
+    text = text_payload(image_bytes)
 
     try:
         upsert_faces(
@@ -83,6 +90,9 @@ async def index_photo(
         filename=filename,
         faces_detected=len(faces),
         faces=[face.box.as_payload() for face in faces],
+        text_status=text.get("text_status", "skipped"),
+        text=text.get("text", ""),
+        bib_candidates=list(text.get("bib_candidates", [])),
     )
 
 
@@ -100,6 +110,7 @@ async def search_selfie(
     except FaceDetectionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    text = text_payload(image_bytes)
     matches: list[str] = []
 
     if faces:
@@ -113,5 +124,7 @@ async def search_selfie(
         event_id=event_id,
         filename=selfie.filename or "uploaded-selfie",
         faces_detected=len(faces),
+        text_status=text.get("text_status", "skipped"),
+        text=text.get("text", ""),
         matches=matches,
     )

@@ -34,6 +34,26 @@ class CliTest(TestCase):
                     ],
                 ),
                 patch("visora_ml_cli.detect_faces_with_embeddings", return_value=[detected_face]),
+                patch(
+                    "visora_ml_cli.body_reid_payload",
+                    return_value={
+                        "body_embedding_status": "generated",
+                        "body_embeddings_count": 1,
+                        "body_embeddings": [
+                            {
+                                "body_index": 0,
+                                "source_face_index": 0,
+                                "box": {
+                                    "x": 0,
+                                    "y": 0,
+                                    "width": 120,
+                                    "height": 240,
+                                },
+                                "embedding": [0.01] * 512,
+                            }
+                        ],
+                    },
+                ),
                 patch("builtins.print") as print_mock,
             ):
                 exit_code = main()
@@ -60,6 +80,21 @@ class CliTest(TestCase):
                     }
                 ],
                 "embedding_status": "generated",
+                "body_embedding_status": "generated",
+                "body_embeddings_count": 1,
+                "body_embeddings": [
+                    {
+                        "body_index": 0,
+                        "source_face_index": 0,
+                        "box": {
+                            "x": 0,
+                            "y": 0,
+                            "width": 120,
+                            "height": 240,
+                        },
+                        "embedding": [0.01] * 512,
+                    }
+                ],
             },
             payload,
         )

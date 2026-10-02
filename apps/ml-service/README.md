@@ -1,6 +1,6 @@
 # Visora ML Service
 
-Local Python ML code for Visora face indexing and selfie search.
+Local Python ML code for Visora face indexing, body Re-ID embeddings, and selfie search.
 
 ## Laravel Process Mode
 
@@ -12,6 +12,14 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 python visora_ml_cli.py index-photo --event-id local-smoke --photo-id sample-1 --photo-path ../../datasets/samples/lfw/George_HW_Bush_0001.jpg
 python visora_ml_cli.py search-selfie --event-id local-smoke --selfie-path ../../datasets/samples/lfw/George_HW_Bush_0001.jpg
+```
+
+For body Re-ID indexing, use the project-level `.venv-reid` environment because it contains PyTorch and torchreid:
+
+```bash
+cd /Users/hafeez/Workspaces/visora-platform
+source .venv-reid/bin/activate
+python apps/ml-service/visora_ml_cli.py index-photo --event-id local-smoke --photo-id sample-1 --photo-path datasets/samples/lfw/George_HW_Bush_0001.jpg
 ```
 
 ## Optional FastAPI Run
@@ -29,7 +37,7 @@ uvicorn main:app --host 127.0.0.1 --port 8003 --reload
 - `POST /index-photo`
 - `POST /search-selfie`
 
-`/index-photo` and `/search-selfie` now run OpenCV Zoo YuNet face detection and SFace embedding extraction.
+`/index-photo` and `/search-selfie` now run OpenCV Zoo YuNet face detection and SFace embedding extraction. The Laravel CLI path also extracts OSNet body Re-ID embeddings from estimated body crops around detected faces when torchreid and the Market-1501 weights are available.
 
 The optional FastAPI `/index-photo` endpoint can still store vectors in Qdrant for legacy testing.
 

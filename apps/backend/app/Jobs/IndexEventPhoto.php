@@ -46,6 +46,7 @@ class IndexEventPhoto implements ShouldQueue
         $payload = $mlProcess->indexPhoto($photo, $disk->path($photo->storage_path));
 
         $photo->faceEmbeddings()->delete();
+        $photo->bodyEmbeddings()->delete();
 
         foreach (($payload['faces'] ?? []) as $index => $face) {
             $embedding = $face['embedding'] ?? null;
@@ -62,6 +63,22 @@ class IndexEventPhoto implements ShouldQueue
             ]);
         }
 
+        foreach (($payload['body_embeddings'] ?? []) as $index => $body) {
+            $embedding = $body['embedding'] ?? null;
+
+            if (! is_array($embedding)) {
+                continue;
+            }
+
+            $photo->bodyEmbeddings()->create([
+                'event_id' => $photo->event_id,
+                'body_index' => $body['body_index'] ?? $index,
+                'source_face_index' => $body['source_face_index'] ?? null,
+                'box' => $body['box'] ?? null,
+                'embedding' => PgvectorFaceSearch::vectorLiteral($embedding),
+            ]);
+        }
+
         $this->indexingJob->update([
             'status' => 'completed',
             'ml_status' => $payload['status'] ?? null,
@@ -74,6 +91,10 @@ class IndexEventPhoto implements ShouldQueue
             'faces_detected' => $payload['faces_detected'] ?? $photo->faces_detected,
             'indexed_at' => now(),
         ]);
+
+        if (config('services.image_variants.enabled')) {
+            GeneratePhotoVariants::dispatch($photo->refresh());
+        }
     }
 
     public function failed(?\Throwable $exception): void

@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\DownloadUnlock;
 use App\Models\Event;
 use App\Models\EventPhoto;
+use App\Models\User;
+use App\Support\PhotoDownloadPackages;
 use Illuminate\Support\Collection;
 use Lunar\Models\Cart;
 use Lunar\Models\Channel;
@@ -22,12 +24,14 @@ class LunarPhotoCheckout
 {
     /**
      * @param  Collection<int, EventPhoto>  $photos
+     * @param  array<int, string>  $packageSelections
      */
-    public function checkout(Event $event, Collection $photos, ?string $customerEmail = null): Order
+    public function checkout(Event $event, Collection $photos, ?string $customerEmail = null, ?User $user = null, array $packageSelections = []): Order
     {
         $currency = $this->currency();
         $channel = $this->channel();
         $this->taxSetup();
+        $customer = $user ? app(LunarCustomerSync::class)->sync($user) : null;
 
         $cart = Cart::create([
             'currency_id' => $currency->id,
@@ -35,17 +39,31 @@ class LunarPhotoCheckout
             'meta' => [
                 'visora_event_id' => $event->id,
                 'customer_email' => $customerEmail,
-                'checkout_mode' => 'local_mvp',
+                'checkout_mode' => config('services.photo_checkout.payment_driver'),
             ],
         ]);
 
+        if ($user) {
+            $cart->associate($user, policy: 'override');
+        }
+
+        if ($customer) {
+            $cart->setCustomer($customer);
+        }
+
         foreach ($photos as $photo) {
-            $this->ensurePrice($photo, $currency);
+            $packageCode = $packageSelections[$photo->id] ?? PhotoDownloadPackages::defaultCode();
+            $package = PhotoDownloadPackages::get($packageCode);
+
+            $this->ensurePrice($photo, $currency, $package['price_cents']);
 
             $cart->add($photo, quantity: 1, meta: [
                 'event_id' => $event->id,
                 'event_photo_id' => $photo->id,
                 'original_filename' => $photo->original_filename,
+                'package_code' => $packageCode,
+                'download_variant' => $package['variant'],
+                'package_label' => $package['label'],
             ]);
         }
 
@@ -60,24 +78,50 @@ class LunarPhotoCheckout
         ]);
 
         $order = $cart->createOrder(allowMultipleOrders: true);
-        $order->update([
-            'status' => 'payment-received',
-        ]);
 
         foreach ($photos as $photo) {
+            $packageCode = $packageSelections[$photo->id] ?? PhotoDownloadPackages::defaultCode();
+            $package = PhotoDownloadPackages::get($packageCode);
+
             DownloadUnlock::create([
                 'event_photo_id' => $photo->id,
+                'user_id' => $user?->id,
                 'order_reference' => $order->reference,
-                'customer_email' => $customerEmail,
-                'status' => 'unlocked',
-                'unlocked_at' => now(),
+                'customer_email' => $customerEmail ?: $user?->email,
+                'package_code' => $packageCode,
+                'download_variant' => $package['variant'],
+                'price_cents' => $package['price_cents'],
+                'status' => 'pending',
+                'unlocked_at' => null,
             ]);
         }
 
         return $order->refresh();
     }
 
-    public function ensurePrice(EventPhoto $photo, Currency $currency): Price
+    public function complete(Order $order): Order
+    {
+        if ($order->status === 'payment-received') {
+            return $order->refresh();
+        }
+
+        $order->update([
+            'status' => 'payment-received',
+            'placed_at' => now(),
+        ]);
+
+        DownloadUnlock::query()
+            ->where('order_reference', $order->reference)
+            ->where('status', 'pending')
+            ->update([
+                'status' => 'unlocked',
+                'unlocked_at' => now(),
+            ]);
+
+        return $order->refresh();
+    }
+
+    public function ensurePrice(EventPhoto $photo, Currency $currency, ?int $priceCents = null): Price
     {
         $this->taxSetup();
 
@@ -88,7 +132,7 @@ class LunarPhotoCheckout
                 'min_quantity' => 1,
             ],
             [
-                'price' => (int) config('services.photo_checkout.price_cents'),
+                'price' => $priceCents ?? (int) config('services.photo_checkout.price_cents'),
             ],
         );
     }

@@ -51,4 +51,38 @@ class VisoraDomainModelTest extends TestCase
         $this->assertSame($photo->id, $unlock->photo->id);
         $this->assertSame($user->id, $unlock->user->id);
     }
+
+    public function test_event_access_approval_relationships_work(): void
+    {
+        $user = User::factory()->create();
+
+        $event = Event::create([
+            'name' => 'Approved Event',
+            'slug' => 'approved-event',
+            'is_active' => true,
+        ]);
+
+        $this->assertFalse($user->canAccessEvent($event));
+        $this->assertFalse($event->isAccessibleBy($user));
+
+        $event->approvedUsers()->attach($user->id, ['approved_at' => now()]);
+
+        $this->assertTrue($user->canAccessEvent($event));
+        $this->assertTrue($event->isAccessibleBy($user));
+        $this->assertSame($event->id, $user->approvedEvents()->first()->id);
+    }
+
+    public function test_admin_can_access_events_without_customer_approval(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $event = Event::create([
+            'name' => 'Admin Event',
+            'slug' => 'admin-event',
+            'is_active' => true,
+        ]);
+
+        $this->assertTrue($admin->canAccessEvent($event));
+        $this->assertTrue($event->isAccessibleBy($admin));
+    }
 }

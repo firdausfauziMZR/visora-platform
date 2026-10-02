@@ -35,6 +35,10 @@ return [
         ],
     ],
 
+    'stripe' => [
+        'secret' => env('STRIPE_SECRET'),
+    ],
+
     'ml_service' => [
         'url' => env('ML_SERVICE_URL', 'http://127.0.0.1:8001'),
     ],
@@ -43,11 +47,54 @@ return [
         'python' => env('VISORA_ML_PYTHON', base_path('../ml-service/.venv/bin/python')),
         'script' => env('VISORA_ML_SCRIPT', base_path('../ml-service/visora_ml_cli.py')),
         'timeout' => env('VISORA_ML_TIMEOUT', 60),
+        'auto_index_on_upload' => env('VISORA_AUTO_INDEX_ON_UPLOAD', false),
+    ],
+
+    'image_variants' => [
+        'enabled' => env('VISORA_IMAGE_VARIANTS', true),
+        'medium' => [
+            'width' => 1280,
+            'height' => 1280,
+        ],
+        'thumbnail' => [
+            'width' => 256,
+            'height' => 256,
+        ],
+        'social_og' => [
+            'width' => 1200,
+            'height' => 630,
+        ],
     ],
 
     'photo_checkout' => [
+        'payment_driver' => env('VISORA_PAYMENT_DRIVER', 'local'),
         'price_cents' => env('VISORA_PHOTO_PRICE_CENTS', 1000),
         'currency_code' => env('VISORA_PHOTO_CURRENCY', 'USD'),
+        'packages' => [
+            'web' => [
+                'label' => 'Web Download',
+                'description' => 'Compressed copy for sharing and mobile use.',
+                'variant' => 'medium',
+                'price_cents' => env('VISORA_PHOTO_WEB_PRICE_CENTS', 500),
+            ],
+            'social' => [
+                'label' => 'Social Crop',
+                'description' => 'Large social preview crop for posts and previews.',
+                'variant' => 'social_og',
+                'price_cents' => env('VISORA_PHOTO_SOCIAL_PRICE_CENTS', 800),
+            ],
+            'original' => [
+                'label' => 'Original Download',
+                'description' => 'Full original file uploaded by the event organizer.',
+                'variant' => 'original',
+                'price_cents' => env('VISORA_PHOTO_PRICE_CENTS', 1000),
+            ],
+        ],
+    ],
+
+    'photo_search' => [
+        'match_limit' => env('VISORA_MATCH_LIMIT', 20),
+        'max_cosine_distance' => env('VISORA_MATCH_MAX_COSINE_DISTANCE', 0.45),
     ],
 
 ];

@@ -12,6 +12,7 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Facades\Storage;
 
 class EventPhotoResource extends Resource
@@ -21,6 +22,8 @@ class EventPhotoResource extends Resource
     protected static ?string $navigationIcon = 'heroicon-o-photo';
 
     protected static ?string $navigationGroup = 'Events';
+
+    protected static bool $shouldRegisterNavigation = false;
 
     public static function form(Form $form): Form
     {
@@ -39,11 +42,12 @@ class EventPhotoResource extends Resource
                             ->directory('event-photos')
                             ->image()
                             ->imagePreviewHeight('160')
-                            ->getUploadedFileUsing(fn (BaseFileUpload $component, string $file, string|array|null $storedFileNames): ?array => self::uploadedPhotoPreview($component, $file, $storedFileNames))
+                            ->helperText('Upload one event photo.')
+                            ->getUploadedFileUsing(fn (BaseFileUpload $component, string $file, string|array|null $storedFileNames): ?array => static::uploadedPhotoPreview($component, $file, $storedFileNames))
                             ->preserveFilenames()
-                            ->required(),
-                        Forms\Components\TextInput::make('original_filename')
-                            ->maxLength(255),
+                            ->required()
+                            ->columnSpanFull(),
+
                         Forms\Components\TextInput::make('storage_disk')
                             ->default('local')
                             ->required()
@@ -73,7 +77,9 @@ class EventPhotoResource extends Resource
                             ->default(0),
                         Forms\Components\DateTimePicker::make('indexed_at')
                             ->label('Indexed At'),
-                        Forms\Components\KeyValue::make('metadata')
+                        Forms\Components\Placeholder::make('variants')
+                            ->label('Processed variants')
+                            ->content(fn (?EventPhoto $record): HtmlString => static::variantPreviewBlock($record))
                             ->columnSpanFull(),
                     ])
                     ->columns(3),
@@ -127,24 +133,11 @@ class EventPhotoResource extends Resource
                     ]),
             ])
             ->actions([
-                Tables\Actions\Action::make('runIndexingNow')
-                    ->label('Run Indexing Now')
-                    ->icon('heroicon-o-bolt')
-                    ->requiresConfirmation()
-                    ->action(function (EventPhoto $record, PhotoIndexingDispatcher $dispatcher): void {
-                        $job = $dispatcher->runNow($record);
-
-                        Notification::make()
-                            ->title('Photo indexed')
-                            ->body("Detected {$job->photo->faces_detected} face(s).")
-                            ->success()
-                            ->send();
-                    }),
                 Tables\Actions\Action::make('queueIndexing')
-                    ->label('Queue Indexing')
+                    ->label('Queue Reindexing')
                     ->icon('heroicon-o-cpu-chip')
                     ->requiresConfirmation()
-                    ->visible(fn (EventPhoto $record): bool => in_array($record->status, ['uploaded', 'failed'], true))
+                    ->visible(fn (EventPhoto $record): bool => in_array($record->status, ['uploaded', 'indexed', 'failed'], true))
                     ->action(function (EventPhoto $record, PhotoIndexingDispatcher $dispatcher): void {
                         $dispatcher->queue($record);
 
@@ -158,12 +151,12 @@ class EventPhotoResource extends Resource
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\BulkAction::make('queueIndexing')
-                        ->label('Queue Indexing')
+                        ->label('Queue Reindexing')
                         ->icon('heroicon-o-cpu-chip')
                         ->requiresConfirmation()
                         ->action(function ($records, PhotoIndexingDispatcher $dispatcher): void {
                             $records
-                                ->filter(fn (EventPhoto $record): bool => in_array($record->status, ['uploaded', 'failed'], true))
+                                ->filter(fn (EventPhoto $record): bool => in_array($record->status, ['uploaded', 'indexed', 'failed'], true))
                                 ->each(fn (EventPhoto $record) => $dispatcher->queue($record));
 
                             Notification::make()
@@ -212,5 +205,62 @@ class EventPhotoResource extends Resource
             'type' => $storage->mimeType($file),
             'url' => route('photos.preview', [$record->event, $record]),
         ];
+    }
+
+    protected static function variantPreviewBlock(?EventPhoto $record): HtmlString
+    {
+        if (! $record || ! $record->event) {
+            return new HtmlString('<span class="text-sm text-gray-500 dark:text-gray-400">No variants available.</span>');
+        }
+
+        $variants = [
+            'thumbnail' => 'Thumbnail',
+            'medium' => 'Medium',
+            'social_og' => 'Social OG',
+        ];
+
+        $cards = collect($variants)
+            ->map(function (string $label, string $variant) use ($record): ?string {
+                $path = $record->variantPath($variant);
+
+                if (! $path || ! Storage::disk($record->storage_disk)->exists($path)) {
+                    return null;
+                }
+
+                $url = route('photos.preview', [$record->event, $record, 'variant' => $variant]);
+                $metadata = data_get($record->metadata, "variants.{$variant}", []);
+                $size = trim(sprintf(
+                    '%s%s%s',
+                    data_get($metadata, 'width') ?: '',
+                    data_get($metadata, 'width') && data_get($metadata, 'height') ? ' x ' : '',
+                    data_get($metadata, 'height') ?: '',
+                ));
+
+                return sprintf(
+                    '<a href="%s" target="_blank" class="block rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition hover:border-primary-500 dark:border-white/10 dark:bg-white/5">
+                        <div class="aspect-video overflow-hidden rounded-md bg-gray-100 dark:bg-gray-900">
+                            <img src="%s" alt="%s preview" class="h-full w-full object-contain">
+                        </div>
+                        <div class="mt-2 text-sm font-medium text-gray-950 dark:text-white">%s</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">%s</div>
+                    </a>',
+                    e($url),
+                    e($url),
+                    e($label),
+                    e($label),
+                    e($size ?: $path),
+                );
+            })
+            ->filter()
+            ->implode('');
+
+        if ($cards === '') {
+            return new HtmlString('<span class="text-sm text-gray-500 dark:text-gray-400">No processed variants found yet.</span>');
+        }
+
+        return new HtmlString(sprintf(
+            '<div class="grid gap-4 md:grid-cols-3">%s</div>',
+            $cards,
+        ));
     }
 }

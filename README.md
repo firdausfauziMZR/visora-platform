@@ -89,6 +89,9 @@ The pgvector extension is installed in the local `visora` database, and Laravel 
 
 See `docs/project-status.md` for the current scope, completed work, deferred work, constraints, and next steps.
 
+See `docs/datasets.md` for local R&D dataset setup, including WIDER FACE, VGGFace2, Market-1501, and DeepSportradar folder conventions.
+See `docs/ml-evaluation.md` for the current model evaluation workflow before training.
+
 Local admin credentials:
 
 ```text

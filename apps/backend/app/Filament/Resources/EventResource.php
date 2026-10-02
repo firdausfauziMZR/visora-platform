@@ -3,6 +3,8 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\EventResource\Pages;
+use App\Filament\Resources\EventResource\RelationManagers\ApprovedCustomersRelationManager;
+use App\Filament\Resources\EventResource\RelationManagers\PendingAccessRequestsRelationManager;
 use App\Filament\Resources\EventResource\RelationManagers\PhotosRelationManager;
 use App\Models\Event;
 use Filament\Forms;
@@ -10,6 +12,7 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 
 class EventResource extends Resource
@@ -37,6 +40,38 @@ class EventResource extends Resource
                             ->required()
                             ->maxLength(255)
                             ->unique(ignoreRecord: true),
+                        Forms\Components\TextInput::make('access_code')
+                            ->label('Access Code')
+                            ->helperText('Share this code with customers who should unlock this event.')
+                            ->default(fn (): string => Event::generateAccessCode())
+                            ->dehydrateStateUsing(fn (?string $state): ?string => Event::normalizeAccessCode($state))
+                            ->maxLength(32)
+                            ->unique(ignoreRecord: true),
+                        Forms\Components\Select::make('access_mode')
+                            ->label('Access Mode')
+                            ->options(Event::accessModeOptions())
+                            ->default(Event::ACCESS_MODE_CODE_GRANTS_ACCESS)
+                            ->required()
+                            ->helperText('Controls what happens when a customer scans the QR code or enters the event code.'),
+                        Forms\Components\Placeholder::make('access_links')
+                            ->label('QR Access')
+                            ->content(function (?Event $record): HtmlString {
+                                if (! $record?->access_code) {
+                                    return new HtmlString('Save the event to generate a QR link.');
+                                }
+
+                                $accessUrl = e(route('event-access-codes.show', $record->access_code));
+                                $qrUrl = e(route('events.access-qr', $record));
+
+                                return new HtmlString(<<<HTML
+                                    <div style="display:grid; gap:0.5rem;">
+                                        <a href="{$accessUrl}" target="_blank" rel="noreferrer">Open customer access link</a>
+                                        <a href="{$qrUrl}" target="_blank" rel="noreferrer">Open QR code</a>
+                                        <code style="word-break:break-all;">{$accessUrl}</code>
+                                    </div>
+                                HTML);
+                            })
+                            ->columnSpanFull(),
                         Forms\Components\DateTimePicker::make('starts_at')
                             ->label('Starts At'),
                         Forms\Components\DateTimePicker::make('ends_at')
@@ -64,6 +99,16 @@ class EventResource extends Resource
                 Tables\Columns\TextColumn::make('slug')
                     ->searchable()
                     ->toggleable(),
+                Tables\Columns\TextColumn::make('access_code')
+                    ->label('Access Code')
+                    ->searchable()
+                    ->copyable()
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('access_mode')
+                    ->label('Access Mode')
+                    ->formatStateUsing(fn (?string $state): string => Event::accessModeOptions()[$state] ?? 'QR/code grants access')
+                    ->badge()
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('starts_at')
                     ->dateTime()
                     ->sortable(),
@@ -87,6 +132,11 @@ class EventResource extends Resource
                     ->label('Active'),
             ])
             ->actions([
+                Tables\Actions\Action::make('qr')
+                    ->label('QR')
+                    ->icon('heroicon-o-qr-code')
+                    ->url(fn (Event $record): string => route('events.access-qr', $record))
+                    ->openUrlInNewTab(),
                 Tables\Actions\EditAction::make(),
             ])
             ->bulkActions([
@@ -99,6 +149,8 @@ class EventResource extends Resource
     public static function getRelations(): array
     {
         return [
+            ApprovedCustomersRelationManager::class,
+            PendingAccessRequestsRelationManager::class,
             PhotosRelationManager::class,
         ];
     }

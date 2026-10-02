@@ -13,7 +13,8 @@ class PgvectorFaceSearch
         int|string $eventId,
         string $absoluteSelfiePath,
         ?string $filename = null,
-        int $limit = 20,
+        ?int $limit = null,
+        ?float $maxCosineDistance = null,
     ): array {
         if (DB::getDriverName() !== 'pgsql') {
             throw new RuntimeException('pgvector face search requires the PostgreSQL connection.');
@@ -35,6 +36,9 @@ class PgvectorFaceSearch
 
         $vector = self::vectorLiteral($embedding);
 
+        $limit ??= (int) config('services.photo_search.match_limit', 20);
+        $maxCosineDistance ??= (float) config('services.photo_search.max_cosine_distance', 0.45);
+
         $matches = DB::select(
             <<<'SQL'
                 select
@@ -43,10 +47,11 @@ class PgvectorFaceSearch
                 from face_embeddings
                 where event_id = ?
                 group by event_photo_id
+                having min(embedding <=> ?::vector) <= ?
                 order by cosine_distance asc
                 limit ?
             SQL,
-            [$vector, $eventId, $limit],
+            [$vector, $eventId, $vector, $maxCosineDistance, $limit],
         );
 
         return [

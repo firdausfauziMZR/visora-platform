@@ -25,6 +25,7 @@ class EventPhoto extends Model implements Purchasable
         'mime_type',
         'file_size',
         'status',
+        'tax_class_id',
         'faces_detected',
         'indexed_at',
         'metadata',
@@ -35,14 +36,33 @@ class EventPhoto extends Model implements Purchasable
         return [
             'file_size' => 'integer',
             'faces_detected' => 'integer',
+            'tax_class_id' => 'integer',
             'indexed_at' => 'datetime',
             'metadata' => 'array',
         ];
     }
 
+    protected static function booted(): void
+    {
+        static::creating(function (EventPhoto $photo): void {
+            if (! $photo->tax_class_id) {
+                $photo->tax_class_id = TaxClass::getDefault()?->id
+                    ?: TaxClass::query()->firstOrCreate(
+                        ['default' => true],
+                        ['name' => 'Default Tax Class'],
+                    )->id;
+            }
+        });
+    }
+
     public function event(): BelongsTo
     {
         return $this->belongsTo(Event::class);
+    }
+
+    public function taxClass(): BelongsTo
+    {
+        return $this->belongsTo(TaxClass::modelClass());
     }
 
     public function indexingJobs(): HasMany
@@ -53,6 +73,11 @@ class EventPhoto extends Model implements Purchasable
     public function faceEmbeddings(): HasMany
     {
         return $this->hasMany(FaceEmbedding::class);
+    }
+
+    public function bodyEmbeddings(): HasMany
+    {
+        return $this->hasMany(BodyEmbedding::class);
     }
 
     public function downloadUnlocks(): HasMany
@@ -72,7 +97,7 @@ class EventPhoto extends Model implements Purchasable
 
     public function getTaxClass(): TaxClassContract
     {
-        return TaxClass::getDefault() ?: TaxClass::query()->firstOrCreate(
+        return $this->taxClass ?: TaxClass::getDefault() ?: TaxClass::query()->firstOrCreate(
             ['default' => true],
             ['name' => 'Default Tax Class'],
         );
@@ -115,7 +140,18 @@ class EventPhoto extends Model implements Purchasable
 
     public function getThumbnail(): string
     {
-        return '';
+        return $this->variantPath('thumbnail')
+            ?: $this->storage_path;
+    }
+
+    public function variantPath(string $variant): ?string
+    {
+        return data_get($this->metadata, "variants.{$variant}.path");
+    }
+
+    public function variantUrl(string $variant): ?string
+    {
+        return data_get($this->metadata, "variants.{$variant}.path");
     }
 
     public function canBeFulfilledAtQuantity(int $quantity): bool

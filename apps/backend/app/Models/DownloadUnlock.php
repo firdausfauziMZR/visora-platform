@@ -15,6 +15,9 @@ class DownloadUnlock extends Model
         'user_id',
         'order_reference',
         'customer_email',
+        'package_code',
+        'download_variant',
+        'price_cents',
         'status',
         'unlocked_at',
         'expires_at',
@@ -23,6 +26,7 @@ class DownloadUnlock extends Model
     protected function casts(): array
     {
         return [
+            'price_cents' => 'integer',
             'unlocked_at' => 'datetime',
             'expires_at' => 'datetime',
         ];
